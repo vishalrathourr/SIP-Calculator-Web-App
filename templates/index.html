@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIP Calculator</title>
+    <style>
+        body {
+            /* font-family: Arial, sans-serif; */
+            font-family: GrowwSans,NotoSans,system-ui;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+        .container {
+            display: flex;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 25px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            flex-wrap: wrap; /* Ensure wrapping for the new section */
+        }
+        .input-section,
+        .results-section {
+            flex: 1;
+            padding: 20px;
+            min-width: 300px; /* Ensure flexibility for smaller screens */
+        }
+
+        .results-section {
+            border-left: 2px solid #e0e0e0;
+        }
+
+        .input-group {
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+        }
+        .input-group label {
+            display: inline-block;
+            font-size: 1.1rem;
+            color: #333;
+            margin-right: 10px;
+            width: 520px;
+        }
+
+        .input-group input[type="number"] {
+            width: 120px;
+            text-align: right;
+            font-size: 1.15rem;
+            padding-left: 30px;
+            padding-right: 15px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            color: #4caf50;
+            font-weight: bold;
+            background-color: #e8fbec;
+            border-radius: 5px;
+            border: none;
+        }
+
+        .input-group input[type="range"] {
+            width: 97%;
+            margin-top: 10px;
+        }
+
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f1f8e9;
+            border-radius: 8px;
+        }
+
+        .output-graph {
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        /* New Graph Section Styles */
+        .graph-section {
+            flex: 0 0 100%; /* Full width */
+            text-align: center;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 15px;
+        }
+
+        .plot-container {
+            width: 100%;
+            height: 600px;
+            margin-top: 20px;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+        // Existing JavaScript code for SIP calculation and chart rendering
+        function updateValues(inputId, value) {
+            document.getElementById(inputId).value = value;
+            calculateSIP();
+        }
+
+        function calculateSIP() {
+            const investmentAmount = parseFloat(document.getElementById('investment_amount').value);
+            const annualInterestRate = parseFloat(document.getElementById('annual_interest_rate').value);
+            const timePeriodYears = parseFloat(document.getElementById('time_period_years').value);
+
+            if (investmentAmount && annualInterestRate && timePeriodYears) {
+                const totalMonths = timePeriodYears * 12;
+                const monthlyRate = annualInterestRate / 12 / 100;
+
+                const futureValue = investmentAmount *
+                    ((Math.pow(1 + monthlyRate, totalMonths) - 1) / monthlyRate) * (1 + monthlyRate);
+
+                const totalInvestment = investmentAmount * totalMonths;
+                const estimatedReturns = futureValue - totalInvestment;
+
+                document.getElementById('total_investment').innerText = `₹${formatIndianCurrency(totalInvestment)}`;
+                document.getElementById('estimated_returns').innerText = `₹${formatIndianCurrency(estimatedReturns)}`;
+                document.getElementById('total_value').innerText = `₹${formatIndianCurrency(futureValue)}`;
+
+                updatePieChart(totalInvestment, estimatedReturns);
+                sendDataToServer(investmentAmount, annualInterestRate, timePeriodYears); // Send data for graph update
+            }
+        }
+
+        function formatIndianCurrency(amount) {
+            const parts = amount.toFixed(0).toString().split(".");
+            const integerPart = parts[0];
+            const decimalPart = parts[1] || "";
+            const lastThreeDigits = integerPart.slice(-3);
+            const otherDigits = integerPart.slice(0, -3);
+
+            const formattedIntegerPart = otherDigits
+                ? otherDigits.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + "," + lastThreeDigits
+                : lastThreeDigits;
+
+            return formattedIntegerPart + (decimalPart ? "." + decimalPart : "");
+        }
+
+        function updatePieChart(totalInvestment, estimatedReturns) {
+            const ctx = document.getElementById('investmentChart').getContext('2d');
+
+            const data = {
+                labels: ['Estimated Returns', 'Total Investment'],
+                datasets: [{
+                    data: [estimatedReturns, totalInvestment],
+                    backgroundColor: ['royalblue', '#e0e0e0'],
+                    borderWidth: 1,
+                }]
+            };
+
+            if (window.investmentChart instanceof Chart) {
+                window.investmentChart.data = data;
+                window.investmentChart.update();
+            } else {
+                window.investmentChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: data,
+                    options: {
+                        responsive: true,
+                        rotation: Math.PI,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(tooltipItem) {
+                                        return '₹' + tooltipItem.raw.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Function to send data to server for year-on-year chart update
+        function sendDataToServer(investmentAmount, annualInterestRate, timePeriodYears) {
+            $.ajax({
+                url: '/update_plot', // Endpoint that returns the plot HTML
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    investment_amount: investmentAmount,
+                    annual_interest_rate: annualInterestRate,
+                    time_period_years: timePeriodYears
+                }),
+                success: function(response) {
+                    $('#yearlyGrowthPlot').html(response.plot_html); // Dynamically update the graph on the page
+                }
+            });
+        }
+
+        window.onload = function() {
+            calculateSIP();
+        };
+    </script>
+</head>
+<body>
+    <div class="container">
+        <!-- Input Section -->
+        <div class="input-section">
+            <h1 style="font-weight: bold;">SIP Calculator</h1>
+            <div class="input-group">
+                <label for="investment_amount">Monthly Investment(₹):</label>
+                <input type="number" id="investment_amount" min="1000" max="1000000" step="500" value="25000" oninput="updateValues('investment_amount_range', this.value)">
+            </div>
+            <div class="input-group">
+                <input type="range" id="investment_amount_range" min="1000" max="1000000" step="500" value="25000" oninput="updateValues('investment_amount', this.value)">
+            </div>
+            <div class="input-group">
+                <label for="annual_interest_rate">Expected Return Rate (p.a):</label>
+                <input type="number" id="annual_interest_rate" min="1" max="30" step="0.1" value="12" oninput="updateValues('annual_interest_rate_range', this.value)">
+                <span style="font-weight: bold; color: #4caf50; " class="percentage" f>%</span>
+            </div>
+            <div class="input-group">
+                <input type="range" id="annual_interest_rate_range" min="1" max="30" step="0.1" value="12" oninput="updateValues('annual_interest_rate', this.value)">
+            </div>
+            <div class="input-group">
+                <label for="time_period_years">Time Period (Years):</label>
+                <input type="number" id="time_period_years" min="1" max="40" step="1" value="10" oninput="updateValues('time_period_years_range', this.value)">
+                <span style="font-weight: bold; color: #4caf50;" class="years" >Yr</span>
+            </div>
+            <div class="input-group">
+                <input type="range" id="time_period_years_range" min="1" max="40" step="1" value="10" oninput="updateValues('time_period_years', this.value)">
+            </div>
+            <div class="results">
+                <h2>Results</h2>
+                <p style="text-align: end;">Invested Amount: <span id="total_investment" style="color: black; font-weight: bold;">₹0 </span></p>
+                <p style="text-align: end;" >Est. Returns: <span id="estimated_returns" style="color: black; font-weight: bold;">₹0</span></p>
+                <p style="text-align: end;">Total Value: <span id="total_value" style="color: black; font-weight: bold;">₹0</span></p>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section output-graph">
+            <h2 style="text-align: center; padding-bottom: 50px;">Investment Growth</h2>
+            <canvas id="investmentChart" width="400" height="400" ></canvas>
+        </div>
+
+        <!-- New Graph Section -->
+        <div class="graph-section">
+            <h1>Year on Year Growth </h1>
+        </div>
+        <div id="yearlyGrowthPlot"></div>
+    </div>
+</body>
+</html>
